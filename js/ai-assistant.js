@@ -1,21 +1,31 @@
 /* ==========================================================================
-   Columbia HVAC Co. — AI Assistant (frontend scaffold only)
+   Columbia HVAC Co. — AI Assistant
    --------------------------------------------------------------------------
-   This module builds the UI shell, open/close behavior, and a single
-   integration point for a future AI backend. It does NOT call any AI API
-   and does NOT simulate a conversation. It is intentionally isolated from
-   the rest of the site so a developer can wire up a real assistant later
-   without touching navigation.js / main.js.
+   Builds the UI shell (unchanged look/markup from the original scaffold),
+   and sends visitor messages to a real backend: a Netlify Function
+   (netlify/functions/assistant.js) that proxies to Anthropic's Claude API.
+   The API key lives only in that server-side function via the
+   ANTHROPIC_API_KEY environment variable — it is never present in this
+   file or any other client-side code.
 
-   Integration point:
+   Integration points (unchanged, still available for other scripts):
      window.ColumbiaHVACAssistant.openAIAssistant()   -> opens the panel
      window.ColumbiaHVACAssistant.closeAIAssistant()  -> closes the panel
      window.ColumbiaHVACAssistant.onUserMessage(fn)   -> register a handler
-        that receives the raw text the visitor typed/clicked, so a future
-        backend (e.g. a hosted LLM endpoint) can be dropped in with one call.
+        that receives the raw text the visitor typed/clicked.
    ========================================================================== */
 (function () {
   'use strict';
+
+  var ASSISTANT_ENDPOINT = '/.netlify/functions/assistant';
+  var FALLBACK_ERROR = "Sorry, something went wrong. Please try again or call 573-204-6161.";
+
+  var QUICK_ACTION_TEXT = {
+    'furnace-repair': 'My furnace needs repair.',
+    'ac-repair': "My A/C isn't cooling.",
+    'emergency': 'This is an emergency.',
+    'estimate': 'I want a free estimate.'
+  };
 
   var messageHandlers = [];
 
@@ -54,9 +64,8 @@
       '</div>' +
       '<div class="ai-panel-body">' +
         '<div class="ai-placeholder-msg">' +
-          'Hi, I\'m the Columbia HVAC Co. assistant (coming soon). For immediate help, please ' +
-          '<a href="tel:5732046161" style="color: var(--color-flame-600); font-weight:700;">call 573-204-6161</a> ' +
-          'or use the quick options below.' +
+          'Hi, I\'m the Columbia HVAC Co. assistant. Ask me a question, or for immediate help ' +
+          '<a href="tel:5732046161" style="color: var(--color-flame-600); font-weight:700;">call 573-204-6161</a>.' +
         '</div>' +
         '<div class="ai-quick-actions">' +
           '<button type="button" data-ai-quick="furnace-repair">My furnace needs repair</button>' +
@@ -64,6 +73,7 @@
           '<button type="button" data-ai-quick="emergency">This is an emergency</button>' +
           '<button type="button" data-ai-quick="estimate">I want a free estimate</button>' +
         '</div>' +
+        '<div class="ai-chat-log" aria-live="polite"></div>' +
       '</div>' +
       '<form class="ai-panel-footer" data-ai-input-form>' +
         '<input type="text" name="message" placeholder="Type a message..." aria-label="Message" autocomplete="off">' +
@@ -84,6 +94,10 @@
     var closeBtn = panel.querySelector('.ai-panel-close');
     var inputForm = panel.querySelector('[data-ai-input-form]');
     var input = panel.querySelector('input[name="message"]');
+    var sendBtn = panel.querySelector('.send-btn');
+    var chatLog = panel.querySelector('.ai-chat-log');
+    var quickActionBtns = panel.querySelectorAll('[data-ai-quick]');
+    var isWaiting = false;
 
     function openAIAssistant() {
       panel.classList.add('is-open');
@@ -98,13 +112,75 @@
       panel.classList.contains('is-open') ? closeAIAssistant() : openAIAssistant();
     }
 
+    function scrollToBottom() {
+      var body = panel.querySelector('.ai-panel-body');
+      if (body) body.scrollTop = body.scrollHeight;
+    }
+
+    function appendMessage(text, role) {
+      var bubble = document.createElement('div');
+      bubble.className = 'ai-message ' + role;
+      bubble.textContent = text;
+      chatLog.appendChild(bubble);
+      scrollToBottom();
+      return bubble;
+    }
+
+    function appendTypingIndicator() {
+      var bubble = document.createElement('div');
+      bubble.className = 'ai-message assistant typing';
+      bubble.setAttribute('aria-label', 'Assistant is typing');
+      bubble.innerHTML =
+        '<span class="ai-typing-dot"></span><span class="ai-typing-dot"></span><span class="ai-typing-dot"></span>';
+      chatLog.appendChild(bubble);
+      scrollToBottom();
+      return bubble;
+    }
+
+    function setWaiting(waiting) {
+      isWaiting = waiting;
+      if (input) input.disabled = waiting;
+      if (sendBtn) sendBtn.disabled = waiting;
+      quickActionBtns.forEach(function (btn) { btn.disabled = waiting; });
+    }
+
+    /* Sends the visitor's message to the Netlify Function backend
+       (netlify/functions/assistant.js), which proxies to Anthropic's
+       Claude API using a server-side API key. */
     function dispatchMessage(text) {
+      if (isWaiting || !text) return;
+
       messageHandlers.forEach(function (fn) {
         try { fn(text); } catch (err) { /* isolate handler errors from UI */ }
       });
-      /* No backend wired up: this is where a future call such as
-         fetch('/api/assistant', {method:'POST', body: JSON.stringify({message:text})})
-         would be added. Left intentionally unimplemented. */
+
+      appendMessage(text, 'user');
+      setWaiting(true);
+      var typingBubble = appendTypingIndicator();
+
+      fetch(ASSISTANT_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      })
+        .then(function (response) {
+          return response.json().catch(function () { return {}; }).then(function (data) {
+            if (!response.ok) throw new Error((data && data.error) || FALLBACK_ERROR);
+            return data;
+          });
+        })
+        .then(function (data) {
+          typingBubble.remove();
+          appendMessage(data.reply || FALLBACK_ERROR, 'assistant');
+        })
+        .catch(function (err) {
+          typingBubble.remove();
+          appendMessage((err && err.message) || FALLBACK_ERROR, 'assistant error');
+        })
+        .finally(function () {
+          setWaiting(false);
+          window.setTimeout(function () { input && input.focus(); }, 50);
+        });
     }
 
     launcher.addEventListener('click', toggleAIAssistant);
@@ -113,9 +189,10 @@
       if (e.key === 'Escape') closeAIAssistant();
     });
 
-    panel.querySelectorAll('[data-ai-quick]').forEach(function (btn) {
+    quickActionBtns.forEach(function (btn) {
       btn.addEventListener('click', function () {
-        dispatchMessage(btn.getAttribute('data-ai-quick'));
+        var key = btn.getAttribute('data-ai-quick');
+        dispatchMessage(QUICK_ACTION_TEXT[key] || key);
       });
     });
 
@@ -127,7 +204,7 @@
       input.value = '';
     });
 
-    /* Public API for a future integration */
+    /* Public API */
     window.ColumbiaHVACAssistant = {
       openAIAssistant: openAIAssistant,
       closeAIAssistant: closeAIAssistant,

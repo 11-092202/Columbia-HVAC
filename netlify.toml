@@ -1,0 +1,11 @@
+# Netlify configuration for Columbia HVAC Co.
+# This is a static, no-build site: the repo root is published as-is.
+# The `functions` directory holds serverless functions (currently the
+# AI assistant backend), which Netlify deploys automatically alongside
+# the static site — no separate build step is required.
+
+[build]
+  publish = "."
+
+[functions]
+  directory = "netlify/functions"
