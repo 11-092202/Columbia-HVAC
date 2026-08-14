@@ -12,6 +12,12 @@ build.py
 # Dependencies
 node_modules/
 
+# Netlify local dev / env secrets
+.netlify/
+.env
+.env.*
+!.env.example
+
 # Logs
 *.log
 npm-debug.log*

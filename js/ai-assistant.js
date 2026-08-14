@@ -1,22 +1,20 @@
 /* ==========================================================================
-   Columbia HVAC Co. — AI Assistant (frontend scaffold only)
+   Columbia HVAC Co. — AI Assistant
    --------------------------------------------------------------------------
-   This module builds the UI shell, open/close behavior, and a single
-   integration point for a future AI backend. It does NOT call any AI API
-   and does NOT simulate a conversation. It is intentionally isolated from
-   the rest of the site so a developer can wire up a real assistant later
-   without touching navigation.js / main.js.
+   Builds the chat widget UI (launcher button + panel), and wires it up to
+   the server-side Netlify Function at /api/chat. No API key or business
+   logic lives in this file — it only sends the visitor's message (plus a
+   short in-memory history) to the server and renders whatever comes back.
 
-   Integration point:
-     window.ColumbiaHVACAssistant.openAIAssistant()   -> opens the panel
-     window.ColumbiaHVACAssistant.closeAIAssistant()  -> closes the panel
-     window.ColumbiaHVACAssistant.onUserMessage(fn)   -> register a handler
-        that receives the raw text the visitor typed/clicked, so a future
-        backend (e.g. a hosted LLM endpoint) can be dropped in with one call.
+   Public API (kept for backwards compatibility / other scripts):
+     window.ColumbiaHVACAssistant.openAIAssistant()
+     window.ColumbiaHVACAssistant.closeAIAssistant()
+     window.ColumbiaHVACAssistant.onUserMessage(fn)
    ========================================================================== */
 (function () {
   'use strict';
 
+  var CHAT_ENDPOINT = '/api/chat';
   var messageHandlers = [];
 
   function buildMarkup() {
@@ -53,21 +51,17 @@
         '</button>' +
       '</div>' +
       '<div class="ai-panel-body">' +
-        '<div class="ai-placeholder-msg">' +
-          'Hi, I\'m the Columbia HVAC Co. assistant (coming soon). For immediate help, please ' +
-          '<a href="tel:5732046161" style="color: var(--color-flame-600); font-weight:700;">call 573-204-6161</a> ' +
-          'or use the quick options below.' +
-        '</div>' +
-        '<div class="ai-quick-actions">' +
-          '<button type="button" data-ai-quick="furnace-repair">My furnace needs repair</button>' +
-          '<button type="button" data-ai-quick="ac-repair">My A/C isn\'t cooling</button>' +
-          '<button type="button" data-ai-quick="emergency">This is an emergency</button>' +
-          '<button type="button" data-ai-quick="estimate">I want a free estimate</button>' +
+        '<div class="ai-messages" role="log" aria-live="polite" aria-relevant="additions" data-ai-messages></div>' +
+        '<div class="ai-quick-actions" data-ai-quick-actions>' +
+          '<button type="button" data-ai-quick="My furnace needs repair">My furnace needs repair</button>' +
+          '<button type="button" data-ai-quick="My A/C isn\'t cooling">My A/C isn\'t cooling</button>' +
+          '<button type="button" data-ai-quick="This is an emergency">This is an emergency</button>' +
+          '<button type="button" data-ai-quick="I want a free estimate">I want a free estimate</button>' +
         '</div>' +
       '</div>' +
       '<form class="ai-panel-footer" data-ai-input-form>' +
-        '<input type="text" name="message" placeholder="Type a message..." aria-label="Message" autocomplete="off">' +
-        '<button type="submit" class="send-btn" aria-label="Send">' +
+        '<input type="text" name="message" placeholder="Type a message..." aria-label="Type your message" autocomplete="off" maxlength="1000">' +
+        '<button type="submit" class="send-btn" aria-label="Send message">' +
           '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' +
         '</button>' +
       '</form>';
@@ -84,36 +78,159 @@
     var closeBtn = panel.querySelector('.ai-panel-close');
     var inputForm = panel.querySelector('[data-ai-input-form]');
     var input = panel.querySelector('input[name="message"]');
+    var sendBtn = inputForm.querySelector('.send-btn');
+    var messagesEl = panel.querySelector('[data-ai-messages]');
+    var quickActionsEl = panel.querySelector('[data-ai-quick-actions]');
 
-    function openAIAssistant() {
-      panel.classList.add('is-open');
-      launcher.setAttribute('aria-expanded', 'true');
-      window.setTimeout(function () { input && input.focus(); }, 200);
+    /* In-memory conversation history for this page session only. */
+    var history = [];
+    var isSending = false;
+    var hasGreeted = false;
+
+    function scrollToBottom() {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
     }
-    function closeAIAssistant() {
-      panel.classList.remove('is-open');
-      launcher.setAttribute('aria-expanded', 'false');
+
+    function appendMessage(role, text) {
+      var row = document.createElement('div');
+      row.className = 'ai-msg ai-msg--' + role;
+
+      var bubble = document.createElement('div');
+      bubble.className = 'ai-msg-bubble';
+      bubble.textContent = text;
+      row.appendChild(bubble);
+
+      messagesEl.appendChild(row);
+      scrollToBottom();
+      return row;
     }
-    function toggleAIAssistant() {
-      panel.classList.contains('is-open') ? closeAIAssistant() : openAIAssistant();
+
+    function appendError(text) {
+      var row = document.createElement('div');
+      row.className = 'ai-msg ai-msg--error';
+      row.setAttribute('role', 'alert');
+
+      var bubble = document.createElement('div');
+      bubble.className = 'ai-msg-bubble';
+      bubble.textContent = text;
+      row.appendChild(bubble);
+
+      messagesEl.appendChild(row);
+      scrollToBottom();
+    }
+
+    function showGreeting() {
+      if (hasGreeted) return;
+      hasGreeted = true;
+      appendMessage(
+        'assistant',
+        'Hi, I\u2019m the Columbia HVAC Co. assistant. Ask me about our services, service area, ' +
+          'or how to get in touch \u2014 or use a quick option below. For anything urgent, please ' +
+          'call 573-204-6161.'
+      );
+    }
+
+    function setTyping(isTyping) {
+      var existing = messagesEl.querySelector('[data-ai-typing]');
+      if (isTyping) {
+        if (existing) return;
+        var row = document.createElement('div');
+        row.className = 'ai-msg ai-msg--assistant ai-msg--typing';
+        row.setAttribute('data-ai-typing', '');
+        row.setAttribute('aria-label', 'Assistant is typing');
+        row.innerHTML =
+          '<div class="ai-msg-bubble ai-typing-dots"><span></span><span></span><span></span></div>';
+        messagesEl.appendChild(row);
+        scrollToBottom();
+      } else if (existing) {
+        existing.remove();
+      }
+    }
+
+    function setSending(sending) {
+      isSending = sending;
+      input.disabled = sending;
+      sendBtn.disabled = sending;
+      sendBtn.setAttribute('aria-busy', sending ? 'true' : 'false');
+    }
+
+    function sendToAssistant(text) {
+      /* Prevent accidental duplicate/overlapping requests. */
+      if (isSending) return;
+
+      appendMessage('user', text);
+      history.push({ role: 'user', content: text });
+      setSending(true);
+      setTyping(true);
+
+      fetch(CHAT_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          /* Send prior turns only (exclude the message just added). */
+          history: history.slice(0, -1).slice(-12)
+        })
+      })
+        .then(function (response) {
+          return response
+            .json()
+            .catch(function () { return {}; })
+            .then(function (data) {
+              if (!response.ok) {
+                throw new Error((data && data.error) || 'The assistant is unavailable right now.');
+              }
+              return data;
+            });
+        })
+        .then(function (data) {
+          var reply = data && data.reply ? data.reply : '';
+          if (!reply) throw new Error('The assistant did not return a response.');
+          history.push({ role: 'assistant', content: reply });
+          appendMessage('assistant', reply);
+        })
+        .catch(function (err) {
+          appendError(
+            (err && err.message) ||
+              'Sorry, something went wrong reaching the assistant. Please try again or call 573-204-6161.'
+          );
+        })
+        .finally(function () {
+          setTyping(false);
+          setSending(false);
+          input.focus();
+        });
     }
 
     function dispatchMessage(text) {
       messageHandlers.forEach(function (fn) {
         try { fn(text); } catch (err) { /* isolate handler errors from UI */ }
       });
-      /* No backend wired up: this is where a future call such as
-         fetch('/api/assistant', {method:'POST', body: JSON.stringify({message:text})})
-         would be added. Left intentionally unimplemented. */
+      sendToAssistant(text);
+    }
+
+    function openAIAssistant() {
+      panel.classList.add('is-open');
+      launcher.setAttribute('aria-expanded', 'true');
+      showGreeting();
+      window.setTimeout(function () { input && input.focus(); }, 200);
+    }
+    function closeAIAssistant() {
+      panel.classList.remove('is-open');
+      launcher.setAttribute('aria-expanded', 'false');
+      launcher.focus();
+    }
+    function toggleAIAssistant() {
+      panel.classList.contains('is-open') ? closeAIAssistant() : openAIAssistant();
     }
 
     launcher.addEventListener('click', toggleAIAssistant);
     closeBtn.addEventListener('click', closeAIAssistant);
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closeAIAssistant();
+      if (e.key === 'Escape' && panel.classList.contains('is-open')) closeAIAssistant();
     });
 
-    panel.querySelectorAll('[data-ai-quick]').forEach(function (btn) {
+    quickActionsEl.querySelectorAll('[data-ai-quick]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         dispatchMessage(btn.getAttribute('data-ai-quick'));
       });
@@ -121,13 +238,14 @@
 
     inputForm.addEventListener('submit', function (e) {
       e.preventDefault();
+      if (isSending) return; // guard against duplicate submits (e.g. double Enter)
       var text = input.value.trim();
-      if (!text) return;
+      if (!text) return; // handle empty messages
       dispatchMessage(text);
       input.value = '';
     });
 
-    /* Public API for a future integration */
+    /* Public API for other scripts / future integrations */
     window.ColumbiaHVACAssistant = {
       openAIAssistant: openAIAssistant,
       closeAIAssistant: closeAIAssistant,
