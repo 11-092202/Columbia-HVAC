@@ -1,0 +1,111 @@
+/* ==========================================================================
+   Columbia HVAC Co. — Responsive rules
+   Breakpoints: 1200 (large desktop cap already via container), 1024, 768, 480
+   ========================================================================== */
+
+/* ---- Large tablets / small desktops ---- */
+@media (max-width: 1100px) {
+  :root { --section-pad: 76px; }
+  .hero-grid { grid-template-columns: 1fr; }
+  .hero-badge-card { margin-left: 0; max-width: 340px; }
+  .split-section { grid-template-columns: 1fr; gap: 44px; }
+  .split-section.reverse { direction: ltr; }
+  .split-section .photo-collage { order: -1; }
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .service-layout { grid-template-columns: 1fr; }
+  .service-sidebar { position: static; flex-direction: row; flex-wrap: wrap; }
+  .service-sidebar .sidebar-card { flex: 1; min-width: 260px; }
+  .related-grid { grid-template-columns: repeat(2, 1fr); }
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 40px 30px; }
+}
+
+/* ---- Tablet ---- */
+@media (max-width: 900px) {
+  .main-nav { display: none; }
+  .header-phone span small { display: none; }
+  .nav-toggle { display: flex; }
+  .pill-grid { grid-template-columns: 1fr; }
+  .cta-banner { flex-direction: column; align-items: flex-start; padding: 40px; }
+  .form-row { grid-template-columns: 1fr; }
+}
+
+/* ---- Mobile ---- */
+@media (max-width: 640px) {
+  :root { --section-pad: 60px; --header-height: 78px; }
+  .container { padding: 0 18px; }
+  h1 { font-size: clamp(2rem, 8vw, 2.6rem); }
+  h2 { font-size: clamp(1.6rem, 6vw, 2rem); }
+  .topbar .container { flex-direction: column; gap: 8px; padding: 10px 18px; }
+  .header-phone span small { display: none; }
+  .header-cta .header-phone strong { font-size: 0.85rem; }
+  .hero-content { padding: 130px 0 70px; }
+  .hero-actions { flex-direction: column; align-items: flex-start; gap: 18px; }
+  .hero-copy p.lead { font-size: 1rem; }
+  .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+  .related-grid { grid-template-columns: 1fr; }
+  .photo-collage { grid-template-columns: 1fr; }
+  .photo-collage .img-placeholder:nth-child(1),
+  .photo-collage .img-placeholder:nth-child(3) { margin-top: 0; }
+  .footer-grid { grid-template-columns: 1fr; gap: 40px; text-align: left; }
+  .footer-brand { text-align: left; }
+  .footer-bottom .container { flex-direction: column; text-align: center; }
+  .form-card { padding: 26px; }
+  .page-hero { padding: 130px 0 60px; }
+  .cta-banner { padding: 30px; }
+  .section-head--split { flex-direction: column; align-items: flex-start; }
+  .ai-assistant-panel { right: 14px; left: 14px; width: auto; bottom: 92px; }
+  .ai-assistant-launcher { right: 18px; bottom: 18px; }
+  .trust-strip .container { gap: 18px 26px; padding: 22px 18px; }
+}
+
+/* ---- Mobile navigation drawer ----
+   Unconditional (not media-gated): the drawer must stay off-canvas at every
+   viewport, since its trigger (.nav-toggle) is only ever shown below 900px.
+   Without this, the drawer's markup would render inline in the page flow
+   on desktop, duplicating the header nav as plain stacked text. */
+.mobile-nav {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  visibility: hidden;
+}
+.mobile-nav-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(20,20,20,0.5);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+.mobile-nav-panel {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: min(360px, 86vw);
+  background: #fff;
+  padding: 26px 24px;
+  transform: translateX(100%);
+  transition: transform var(--transition-base);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.mobile-nav.is-open { visibility: visible; }
+.mobile-nav.is-open .mobile-nav-overlay { opacity: 1; }
+.mobile-nav.is-open .mobile-nav-panel { transform: translateX(0); }
+.mobile-nav-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; }
+.mobile-nav-close { width: 40px; height: 40px; border-radius: 50%; background: var(--color-cream); display: flex; align-items: center; justify-content: center; }
+.mobile-nav-panel a.mobile-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 4px;
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--color-dark);
+}
+.mobile-submenu { display: none; flex-direction: column; padding-left: 14px; }
+.mobile-submenu.is-open { display: flex; }
+.mobile-submenu a { padding: 12px 4px; font-weight: 600; font-size: 0.92rem; color: var(--color-text-muted); border-bottom: none; }
+.mobile-nav-panel .btn { margin-top: 20px; }
+.mobile-nav-foot { margin-top: auto; padding-top: 20px; }
