@@ -123,4 +123,4 @@ function buildSystemPrompt() {
   ].join('\n');
 }
 
-module.exports = { BUSINESS_PROFILE, buildSystemPrompt };
+export { BUSINESS_PROFILE, buildSystemPrompt };

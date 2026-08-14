@@ -4,26 +4,24 @@
    Server-side endpoint the frontend chat widget talks to. It keeps the AI
    API key out of the browser: the client only ever calls this function
    (POST /api/chat -> /.netlify/functions/chat), and this function is the
-   only place that talks to the OpenAI API using a secret stored in a
-   Netlify environment variable (OPENAI_API_KEY).
+   only place that talks to the OpenAI API, using credentials injected by
+   Netlify AI Gateway (OPENAI_API_KEY / OPENAI_BASE_URL).
    ========================================================================== */
 
-const { buildSystemPrompt } = require('./business-data');
+import { buildSystemPrompt } from './business-data.mjs';
 
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const MAX_HISTORY_MESSAGES = 12; // limit context sent per request
 const MAX_MESSAGE_LENGTH = 1000;
 
 function jsonResponse(statusCode, body) {
-  return {
-    statusCode: statusCode,
+  return new Response(JSON.stringify(body), {
+    status: statusCode,
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store'
-    },
-    body: JSON.stringify(body)
-  };
+    }
+  });
 }
 
 function isValidHistoryEntry(entry) {
@@ -34,12 +32,12 @@ function isValidHistoryEntry(entry) {
   );
 }
 
-exports.handler = async function (event) {
-  if (event.httpMethod === 'OPTIONS') {
+export default async (req) => {
+  if (req.method === 'OPTIONS') {
     return jsonResponse(204, {});
   }
 
-  if (event.httpMethod !== 'POST') {
+  if (req.method !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed.' });
   }
 
@@ -52,7 +50,7 @@ exports.handler = async function (event) {
 
   let payload;
   try {
-    payload = JSON.parse(event.body || '{}');
+    payload = await req.json();
   } catch (err) {
     return jsonResponse(400, { error: 'Invalid request body.' });
   }
@@ -77,11 +75,13 @@ exports.handler = async function (event) {
     { role: 'user', content: message }
   ];
 
+  const openaiUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1') + '/chat/completions';
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(function () { controller.abort(); }, 20000);
 
-    const response = await fetch(OPENAI_URL, {
+    const response = await fetch(openaiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -127,4 +127,8 @@ exports.handler = async function (event) {
         : 'Something went wrong reaching the assistant. Please try again, or call 573-204-6161.';
     return jsonResponse(504, { error: message });
   }
+};
+
+export const config = {
+  path: '/api/chat'
 };
