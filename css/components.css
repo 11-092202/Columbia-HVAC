@@ -309,19 +309,60 @@ a.service-card .real-photo { border-radius: 0; border: 0; }
 }
 .form-group textarea { resize: vertical; min-height: 130px; }
 .form-note { font-size: 0.82rem; color: var(--color-text-muted); margin-top: 14px; }
-.form-success {
+.hidden-field { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.required-mark { color: var(--color-flame-600); margin-left: 2px; }
+.form-group input.is-invalid,
+.form-group textarea.is-invalid,
+.form-group select.is-invalid {
+  border-color: #d9432f;
+  background: #fdf3f2;
+}
+.form-group input.is-invalid:focus,
+.form-group textarea.is-invalid:focus,
+.form-group select.is-invalid:focus {
+  box-shadow: 0 0 0 4px rgba(217,67,47,0.14);
+}
+.field-error {
+  display: none;
+  color: #b8271a;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-top: 6px;
+}
+.field-error.is-visible { display: block; }
+.btn.is-loading { position: relative; color: transparent !important; pointer-events: none; }
+.btn.is-loading::after {
+  content: "";
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 18px; height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.5);
+  border-top-color: #fff;
+  animation: btn-spin 0.7s linear infinite;
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+.form-success, .form-error {
   display: none;
   align-items: center;
   gap: 12px;
-  background: #f0fbf3;
-  border: 1px solid #b9e8c4;
-  color: #1c7a34;
   padding: 16px 18px;
   border-radius: var(--radius-sm);
   font-weight: 600;
   margin-top: 18px;
 }
-.form-success.is-visible { display: flex; }
+.form-success {
+  background: #f0fbf3;
+  border: 1px solid #b9e8c4;
+  color: #1c7a34;
+}
+.form-error {
+  background: #fdf2f1;
+  border: 1px solid #f2c2bb;
+  color: #b8271a;
+}
+.form-success.is-visible, .form-error.is-visible { display: flex; }
 
 /* Map embed frame */
 .map-frame {
