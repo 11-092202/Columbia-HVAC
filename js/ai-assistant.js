@@ -65,7 +65,7 @@
           '<button type="button" data-ai-quick="estimate">I want a free estimate</button>' +
         '</div>' +
       '</div>' +
-      '<form class="ai-panel-footer" data-ai-input-form">' +
+      '<form class="ai-panel-footer" data-ai-input-form>' +
         '<input type="text" name="message" placeholder="Type a message..." aria-label="Message" autocomplete="off">' +
         '<button type="submit" class="send-btn" aria-label="Send">' +
           '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' +
