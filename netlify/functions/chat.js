@@ -9,19 +9,35 @@
    ========================================================================== */
 
 const { buildSystemPrompt } = require('./business-data');
+const { getClientIp } = require('./utils/validate');
+const { createRateLimiter } = require('./utils/rate-limit');
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const MAX_HISTORY_MESSAGES = 12; // limit context sent per request
 const MAX_MESSAGE_LENGTH = 1000;
+const MAX_BODY_BYTES = 20 * 1024; // 20KB is generous for a chat turn + trimmed history
 
-function jsonResponse(statusCode, body) {
+// 12 messages / 60s / IP. Generous enough for a real conversation, tight
+// enough to make scripted abuse of the OpenAI-backed endpoint expensive to
+// sustain. See netlify/functions/utils/rate-limit.js for how this is
+// enforced and its limitations under serverless concurrency.
+const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 12 });
+
+function isChatbotEnabled() {
+  // Default to enabled if the variable is unset, so existing deployments
+  // aren't silently broken by introducing this flag. Set
+  // CHATBOT_ENABLED=false (any case) to turn the assistant off.
+  return String(process.env.CHATBOT_ENABLED || 'true').toLowerCase() !== 'false';
+}
+
+function jsonResponse(statusCode, body, extraHeaders) {
   return {
     statusCode: statusCode,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store'
-    },
+    headers: Object.assign(
+      { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      extraHeaders || {}
+    ),
     body: JSON.stringify(body)
   };
 }
@@ -43,6 +59,15 @@ exports.handler = async function (event) {
     return jsonResponse(405, { error: 'Method not allowed.' });
   }
 
+  // Independent server-side kill switch. This is checked here regardless of
+  // what the frontend shows, so a direct POST to this endpoint is refused
+  // even if someone bypasses the UI entirely.
+  if (!isChatbotEnabled()) {
+    return jsonResponse(503, {
+      error: 'The chat assistant is currently unavailable. Please call 573-204-6161 or use the contact form.'
+    });
+  }
+
   if (!process.env.OPENAI_API_KEY) {
     console.error('OPENAI_API_KEY is not configured.');
     return jsonResponse(500, {
@@ -50,9 +75,25 @@ exports.handler = async function (event) {
     });
   }
 
+  const rawBody = event.body || '';
+  const bodyBytes = Buffer.byteLength(rawBody, event.isBase64Encoded ? 'base64' : 'utf8');
+  if (bodyBytes > MAX_BODY_BYTES) {
+    return jsonResponse(413, { error: 'Request is too large.' });
+  }
+
+  const ip = getClientIp(event);
+  const limitResult = limiter.check(ip);
+  if (!limitResult.allowed) {
+    return jsonResponse(
+      429,
+      { error: 'You are sending messages too quickly. Please wait a moment and try again.' },
+      { 'Retry-After': String(limitResult.retryAfterSeconds) }
+    );
+  }
+
   let payload;
   try {
-    payload = JSON.parse(event.body || '{}');
+    payload = JSON.parse(rawBody || '{}');
   } catch (err) {
     return jsonResponse(400, { error: 'Invalid request body.' });
   }

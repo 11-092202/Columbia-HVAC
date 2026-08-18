@@ -4,7 +4,10 @@
   "version": "1.0.0",
   "description": "Columbia HVAC Co. marketing website with a Netlify Function-backed AI assistant.",
   "scripts": {
-    "dev": "netlify dev"
+    "dev": "netlify dev",
+    "dev:cli": "npx netlify-cli dev",
+    "build:demo": "node scripts/build-demo.js",
+    "generate:demo-images": "node scripts/generate-demo-images.js"
   },
   "engines": {
     "node": ">=18"

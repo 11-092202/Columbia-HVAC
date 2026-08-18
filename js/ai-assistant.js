@@ -71,7 +71,20 @@
     return { launcher: launcher, panel: panel };
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
+  /* ---- Enable/disable switch ----
+     The chatbot can be fully turned off via the CHATBOT_ENABLED server
+     environment variable. The AUTHORITATIVE check happens independently
+     inside netlify/functions/chat.js on every request — that still refuses
+     POST /api/chat while disabled even if this frontend check is bypassed,
+     spoofed, or simply never runs (e.g. JS disabled, direct API call).
+     This check only decides whether to show the widget at all. If the
+     status check itself fails (e.g. offline, function not yet available),
+     we fail OPEN here and still render the widget — the backend will
+     correctly refuse the request if the assistant is actually disabled, so
+     failing open here never allows chat to work when it shouldn't. */
+  function initAIAssistant(enabled) {
+    if (enabled === false) return; // Chatbot disabled: render nothing.
+
     var refs = buildMarkup();
     var launcher = refs.launcher;
     var panel = refs.panel;
@@ -253,5 +266,14 @@
         if (typeof fn === 'function') messageHandlers.push(fn);
       }
     };
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    fetch('/api/chat-status')
+      .then(function (response) { return response.ok ? response.json() : { enabled: true }; })
+      .catch(function () { return { enabled: true }; }) // network/offline: fail open (see comment above)
+      .then(function (data) {
+        initAIAssistant(data && data.enabled === false ? false : true);
+      });
   });
 })();

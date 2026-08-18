@@ -323,6 +323,91 @@ a.service-card .real-photo { border-radius: 0; border: 0; }
 }
 .form-success.is-visible { display: flex; }
 
+/* Inline field validation errors, injected by js/main.js next to each
+   input. Empty text = no error, so it takes no visible space. */
+.field-error {
+  display: block;
+  min-height: 0;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #c0392b;
+}
+.field-error:empty { margin-top: 0; }
+.form-group.has-error input,
+.form-group.has-error textarea,
+.form-group.has-error select {
+  border-color: #c0392b;
+  background: #fdf2f1;
+}
+.form-group.has-error input:focus,
+.form-group.has-error textarea:focus,
+.form-group.has-error select:focus {
+  box-shadow: 0 0 0 4px rgba(192, 57, 43, 0.12);
+}
+
+/* Form-level error banner (network failures, rate limiting, server
+   errors) — same footprint/spacing language as .form-success but red. */
+.form-error-banner {
+  display: none;
+  background: #fdf2f1;
+  border: 1px solid #f0c2bd;
+  color: #c0392b;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: 18px;
+}
+.form-error-banner:not(:empty) { display: block; }
+
+/* Anti-spam honeypot field — kept out of sight and out of the tab order
+   for real visitors, but present in the DOM/markup for bots that fill in
+   every field blindly. Intentionally not display:none, since some
+   scripted submissions skip fields hidden that way. */
+.hp-field {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  opacity: 0 !important;
+}
+
+/* Submit button loading state */
+.btn:disabled { cursor: not-allowed; opacity: 0.75; }
+.btn.is-loading {
+  position: relative;
+  color: transparent !important;
+  pointer-events: none;
+}
+.btn.is-loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  animation: btn-spin 700ms linear infinite;
+}
+.btn-outline.is-loading::after,
+.btn-white.is-loading::after {
+  border-color: rgba(38, 38, 38, 0.25);
+  border-top-color: var(--color-dark);
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .btn.is-loading::after { animation-duration: 1400ms; }
+}
+
 /* Map embed frame */
 .map-frame {
   border-radius: var(--radius-lg);

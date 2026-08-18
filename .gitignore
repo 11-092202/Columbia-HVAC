@@ -1,6 +1,13 @@
 # Build artifacts
 build.py
 
+# DEMO MODE generated output — always regenerated from demo.config.js +
+# the real source via `npm run build:demo`. Never hand-edit; never commit
+# (if you deploy the demo as its own Netlify site, point its build command
+# at `npm run build:demo` and its publish directory at `demo`, so it's
+# built fresh from source on every deploy instead of going stale in git).
+demo/
+
 # IDE and OS
 .DS_Store
 .vscode/
