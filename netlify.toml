@@ -1,6 +1,11 @@
 [build]
-  publish = "."
-  functions = "netlify/functions"
+# publish and functions directories are intentionally NOT set here.
+# This repo is used by two separate Netlify sites (the real site and the
+# demo site) with different output locations, and settings in this file
+# override whatever each site's dashboard is configured with. Set these
+# per-site instead, in each site's Project configuration > Build settings:
+#   Real site: Publish directory "."          Functions directory "netlify/functions"
+#   Demo site: Publish directory "demo"       Functions directory "demo/netlify/functions"
 
 [functions]
   node_bundler = "esbuild"
