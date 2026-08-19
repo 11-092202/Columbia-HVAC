@@ -8,9 +8,10 @@
    Netlify environment variable (OPENAI_API_KEY).
    ========================================================================== */
 
-const { buildSystemPrompt } = require('./business-data');
+const { buildSystemPrompt, BUSINESS_PROFILE } = require('./business-data');
 const { getClientIp } = require('./utils/validate');
 const { createRateLimiter } = require('./utils/rate-limit');
+const { getFaqReply } = require('./utils/faq-engine');
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -29,6 +30,18 @@ function isChatbotEnabled() {
   // aren't silently broken by introducing this flag. Set
   // CHATBOT_ENABLED=false (any case) to turn the assistant off.
   return String(process.env.CHATBOT_ENABLED || 'true').toLowerCase() !== 'false';
+}
+
+// Which backend answers messages. Defaults to 'openai' so existing
+// deployments keep working unchanged. Set CHATBOT_PROVIDER=faq to use the
+// zero-dependency keyword/FAQ engine instead — no API key, no external
+// network call, no per-message cost, answers built only from
+// business-data.js. Same enable/disable switch, rate limiting, and
+// validation apply to both providers; only how the reply is produced
+// differs.
+function getChatProvider() {
+  var raw = String(process.env.CHATBOT_PROVIDER || 'openai').toLowerCase();
+  return raw === 'faq' ? 'faq' : 'openai';
 }
 
 function jsonResponse(statusCode, body, extraHeaders) {
@@ -64,14 +77,16 @@ exports.handler = async function (event) {
   // even if someone bypasses the UI entirely.
   if (!isChatbotEnabled()) {
     return jsonResponse(503, {
-      error: 'The chat assistant is currently unavailable. Please call 573-204-6161 or use the contact form.'
+      error: 'The chat assistant is currently unavailable. Please call ' + BUSINESS_PROFILE.phone + ' or use the contact form.'
     });
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  const provider = getChatProvider();
+
+  if (provider === 'openai' && !process.env.OPENAI_API_KEY) {
     console.error('OPENAI_API_KEY is not configured.');
     return jsonResponse(500, {
-      error: 'The assistant is not configured yet. Please call 573-204-6161 for help.'
+      error: 'The assistant is not configured yet. Please call ' + BUSINESS_PROFILE.phone + ' for help.'
     });
   }
 
@@ -110,6 +125,22 @@ exports.handler = async function (event) {
     ? payload.history.filter(isValidHistoryEntry).slice(-MAX_HISTORY_MESSAGES)
     : [];
 
+  // --- Free/zero-dependency provider: answer locally, no network call ---
+  // Same guards above (enabled check, body size, rate limit, message
+  // validation) already ran identically for this path. History isn't used
+  // here — each FAQ answer is looked up fresh from the current message.
+  if (provider === 'faq') {
+    try {
+      const reply = getFaqReply(message, BUSINESS_PROFILE);
+      return jsonResponse(200, { reply: reply });
+    } catch (err) {
+      console.error('FAQ engine error:', err);
+      return jsonResponse(500, {
+        error: 'The assistant hit an unexpected error. Please call ' + BUSINESS_PROFILE.phone + ' for help.'
+      });
+    }
+  }
+
   const messages = [
     { role: 'system', content: buildSystemPrompt() },
     ...history.map(function (entry) {
@@ -143,7 +174,7 @@ exports.handler = async function (event) {
       const errText = await response.text();
       console.error('OpenAI API error:', response.status, errText);
       return jsonResponse(502, {
-        error: 'The assistant is having trouble responding right now. Please try again, or call 573-204-6161.'
+        error: 'The assistant is having trouble responding right now. Please try again, or call ' + BUSINESS_PROFILE.phone + '.'
       });
     }
 
@@ -155,7 +186,7 @@ exports.handler = async function (event) {
 
     if (!reply) {
       return jsonResponse(502, {
-        error: 'The assistant could not generate a response. Please try again, or call 573-204-6161.'
+        error: 'The assistant could not generate a response. Please try again, or call ' + BUSINESS_PROFILE.phone + '.'
       });
     }
 
@@ -164,8 +195,8 @@ exports.handler = async function (event) {
     console.error('Chat function error:', err);
     const message =
       err && err.name === 'AbortError'
-        ? 'The assistant took too long to respond. Please try again, or call 573-204-6161.'
-        : 'Something went wrong reaching the assistant. Please try again, or call 573-204-6161.';
+        ? 'The assistant took too long to respond. Please try again, or call ' + BUSINESS_PROFILE.phone + '.'
+        : 'Something went wrong reaching the assistant. Please try again, or call ' + BUSINESS_PROFILE.phone + '.';
     return jsonResponse(504, { error: message });
   }
 };
